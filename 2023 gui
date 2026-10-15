@@ -544,20 +544,14 @@ local scriptToRun = [[
             return best or btn
         end
 
+        -- The logo button's own image is the dark rounded background,
+        -- so leave the button alone and only hide the logo image(s)
+        -- inside it. (Unlike the chat icon, which is hooked on an outer
+        -- wrapper button.)
         local function hideNativeLogo(btn, pill)
-            if btn:IsA("ImageButton") then
-                pcall(function() btn.ImageTransparency = 1 end)
-            end
-
             for _, d in ipairs(btn:GetDescendants()) do
-                if d == pill or d == ourLogo or d.Name == MENU_BUTTON then
-                elseif d:IsA("ImageLabel") then
+                if d ~= pill and d ~= ourLogo and d:IsA("ImageLabel") then
                     d.ImageTransparency = 1
-                elseif d:IsA("Frame") and not pill:IsDescendantOf(d) then
-                    d.BackgroundTransparency = 1
-                    d.Visible = false
-                elseif d:IsA("TextLabel") then
-                    d.TextTransparency = 1
                 end
             end
         end
