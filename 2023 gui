@@ -478,7 +478,34 @@ local scriptToRun = [[
         local RunService = game:GetService("RunService")
         local CoreGui    = game:GetService("CoreGui")
 
-        local logoImage = "rbxthumb://type=Asset&id=118993800757243&w=150&h=150"
+        local LOGO_ID = "73899106811349"
+
+        -- Tried in order until one loads: the asset's thumbnail (works
+        -- for decals and images), then the id as an image. Until one
+        -- does, Roblox's own logo stays, so the icon is never blank.
+        local LOGO_IMAGES = {
+            "rbxthumb://type=Asset&id=" .. LOGO_ID .. "&w=150&h=150",
+            "rbxassetid://" .. LOGO_ID,
+        }
+
+        local logoImage = nil
+
+        task.spawn(function()
+            local ContentProvider = game:GetService("ContentProvider")
+            for _, image in ipairs(LOGO_IMAGES) do
+                local status
+                pcall(function()
+                    ContentProvider:PreloadAsync({ image }, function(_, fetchStatus)
+                        status = fetchStatus
+                    end)
+                end)
+                if status == Enum.AssetFetchStatus.Success then
+                    logoImage = image
+                    return
+                end
+            end
+            warn("[LegacyLogo] logo image (asset " .. LOGO_ID .. ") did not load; keeping Roblox's logo.")
+        end)
 
         local LOGO_SIZE = 24
 
@@ -565,7 +592,8 @@ local scriptToRun = [[
             ourLogo.Position               = UDim2.new(0.5, 0, 0.5, 0)
             ourLogo.Size                   = UDim2.new(0, LOGO_SIZE, 0, LOGO_SIZE)
             ourLogo.BackgroundTransparency = 1
-            ourLogo.Image                  = logoImage
+            ourLogo.Image                  = logoImage or ""
+            ourLogo.Visible                = logoImage ~= nil
             ourLogo.ScaleType              = Enum.ScaleType.Fit
             ourLogo.Active                 = false
             ourLogo.ZIndex                 = 500
@@ -576,7 +604,7 @@ local scriptToRun = [[
         local function hookLogo(btn)
             logoBtn  = btn
             logoPill = findLogoPill(btn)
-            hideNativeLogo(btn, logoPill)
+            if logoImage then hideNativeLogo(btn, logoPill) end
             attachLogo(logoPill)
         end
 
@@ -603,6 +631,12 @@ local scriptToRun = [[
 
             if not ourLogo or not ourLogo.Parent then
                 hookLogo(logoBtn)
+                return
+            end
+
+            -- Not loaded (yet): keep Roblox's logo showing.
+            if not logoImage then
+                if ourLogo.Visible then ourLogo.Visible = false end
                 return
             end
 
