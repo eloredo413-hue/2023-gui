@@ -18,11 +18,14 @@ pcall(function() setfflag("EnableInGameMenuSongbirdABTest", "False") end)
 local scriptToRun = [[
     print("[Payload] started")
 
-    -- 1. Load ESC Menu
-    pcall(function()
-        loadstring(game:HttpGet("https://raw.githubusercontent.com/letsafe/something/refs/heads/main/2023escmenuv3.lua"))()
+    -- 1. Load the 2019 ESC Menu (the Roblox logo opens it).
+    -- In the background, so the chat and icons don't wait for it.
+    task.spawn(function()
+        pcall(function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/eloredo413-hue/2019-core-gui/refs/heads/main/2019%20gui"))()
+        end)
+        print("[Payload] 2019 ESC menu loaded")
     end)
-    print("[Payload] ESC menu loaded")
 
     -- 2. Load Chat Script
     if not game:IsLoaded() then game.Loaded:Wait() end
@@ -82,7 +85,7 @@ local scriptToRun = [[
         local chatOffIcon = "rbxasset://textures/ui/TopBar/chatOff.png"
         local chatOnIcon  = "rbxasset://textures/ui/TopBar/chatOn.png"
 
-        local ICON_SIZE     = 24
+        local ICON_SIZE     = 20
         local ICON_OFFSET_X = 0
         local ICON_OFFSET_Y = 0
 
@@ -465,6 +468,157 @@ local scriptToRun = [[
                     if b then hookButton(b) end
                 end)
             end
+        end)
+    end)
+
+    -- 4. TopBar Roblox Logo
+    -- Same method as the chat icon: hide the native logo and draw our
+    -- own image inside the button's rounded background.
+    task.spawn(function()
+        local RunService = game:GetService("RunService")
+        local CoreGui    = game:GetService("CoreGui")
+
+        local logoImage = "rbxthumb://type=Asset&id=118993800757243&w=150&h=150"
+
+        local LOGO_SIZE = 24
+
+        -- The 2019 ESC menu puts an invisible button inside the logo.
+        local MENU_BUTTON = "Legacy2019MenuButton"
+
+        local ourLogo  = nil
+        local logoBtn  = nil
+        local logoPill = nil
+
+        local function findNativeMenuButton()
+            local topBarApp = CoreGui:FindFirstChild("TopBarApp")
+            if not topBarApp then return nil end
+
+            -- The logo button sits inside an element named like "MenuIcon".
+            local best, bestArea = nil, 0
+            for _, d in ipairs(topBarApp:GetDescendants()) do
+                if d:IsA("GuiButton") and d.Visible and d.Name ~= MENU_BUTTON then
+                    local inMenuIcon = false
+                    local p = d
+                    while p and p ~= topBarApp do
+                        if p.Name:lower():find("menuicon") then
+                            inMenuIcon = true
+                            break
+                        end
+                        p = p.Parent
+                    end
+                    local s = d.AbsoluteSize
+                    if inMenuIcon and s.X * s.Y > bestArea then
+                        best, bestArea = d, s.X * s.Y
+                    end
+                end
+            end
+            if best then return best end
+
+            -- Otherwise: the leftmost icon-sized button.
+            local left = nil
+            for _, d in ipairs(topBarApp:GetDescendants()) do
+                if d:IsA("GuiButton") and d.Visible and d.Name ~= MENU_BUTTON then
+                    local s = d.AbsoluteSize
+                    if s.X >= 26 and s.X <= 60 and s.Y >= 26 and s.Y <= 60
+                       and (not left or d.AbsolutePosition.X < left.AbsolutePosition.X) then
+                        left = d
+                    end
+                end
+            end
+            return left
+        end
+
+        local function findLogoPill(btn)
+            local btnArea = btn.AbsoluteSize.X * btn.AbsoluteSize.Y
+            if btnArea <= 0 then return btn end
+
+            local best, bestArea = nil, 0
+            for _, d in ipairs(btn:GetDescendants()) do
+                if d:IsA("ImageLabel") and d.Name ~= "LegacyRobloxLogo" and d.Visible then
+                    local area = d.AbsoluteSize.X * d.AbsoluteSize.Y
+                    if area >= btnArea * 0.35 and area > bestArea then
+                        best, bestArea = d, area
+                    end
+                end
+            end
+            return best or btn
+        end
+
+        local function hideNativeLogo(btn, pill)
+            if btn:IsA("ImageButton") then
+                pcall(function() btn.ImageTransparency = 1 end)
+            end
+
+            for _, d in ipairs(btn:GetDescendants()) do
+                if d == pill or d == ourLogo or d.Name == MENU_BUTTON then
+                elseif d:IsA("ImageLabel") then
+                    d.ImageTransparency = 1
+                elseif d:IsA("Frame") and not pill:IsDescendantOf(d) then
+                    d.BackgroundTransparency = 1
+                    d.Visible = false
+                elseif d:IsA("TextLabel") then
+                    d.TextTransparency = 1
+                end
+            end
+        end
+
+        local function attachLogo(pill)
+            if ourLogo and ourLogo.Parent then ourLogo:Destroy() end
+
+            ourLogo = Instance.new("ImageLabel")
+            ourLogo.Name                   = "LegacyRobloxLogo"
+            ourLogo.AnchorPoint            = Vector2.new(0.5, 0.5)
+            ourLogo.Position               = UDim2.new(0.5, 0, 0.5, 0)
+            ourLogo.Size                   = UDim2.new(0, LOGO_SIZE, 0, LOGO_SIZE)
+            ourLogo.BackgroundTransparency = 1
+            ourLogo.Image                  = logoImage
+            ourLogo.ScaleType              = Enum.ScaleType.Fit
+            ourLogo.Active                 = false
+            ourLogo.ZIndex                 = 500
+            ourLogo.Parent                 = pill
+            print("[LegacyLogo] logo attached to", pill:GetFullName())
+        end
+
+        local function hookLogo(btn)
+            logoBtn  = btn
+            logoPill = findLogoPill(btn)
+            hideNativeLogo(btn, logoPill)
+            attachLogo(logoPill)
+        end
+
+        local deadline = tick() + 15
+        while not logoBtn and tick() < deadline do
+            local btn = findNativeMenuButton()
+            if btn then
+                hookLogo(btn)
+            else
+                RunService.Heartbeat:Wait()
+            end
+        end
+        if not logoBtn then
+            warn("[LegacyLogo] Roblox logo button not found after 15s.")
+        end
+
+        RunService.RenderStepped:Connect(function()
+            -- The top bar rebuilt the button: find it again.
+            if not logoBtn or not logoBtn:IsDescendantOf(CoreGui) then
+                local btn = findNativeMenuButton()
+                if btn then hookLogo(btn) end
+                return
+            end
+
+            if not ourLogo or not ourLogo.Parent then
+                hookLogo(logoBtn)
+                return
+            end
+
+            -- Keep the native logo hidden and ours as set.
+            hideNativeLogo(logoBtn, logoPill)
+            if ourLogo.Image ~= logoImage then ourLogo.Image = logoImage end
+            if ourLogo.ImageTransparency ~= 0 then ourLogo.ImageTransparency = 0 end
+            if ourLogo.Visible ~= true then ourLogo.Visible = true end
+            local tSize = UDim2.new(0, LOGO_SIZE, 0, LOGO_SIZE)
+            if ourLogo.Size ~= tSize then ourLogo.Size = tSize end
         end)
     end)
 ]]
